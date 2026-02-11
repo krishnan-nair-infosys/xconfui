@@ -19,12 +19,14 @@
 package server
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"html/template"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-
+        "os"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -128,7 +130,23 @@ func NewProxyToBackend(targetHost string) *httputil.ReverseProxy {
 		log.Errorf("Proxy error: %v", err)
 		panic(err)
 	}
-	return httputil.NewSingleHostReverseProxy(url)
+
+	proxy := httputil.NewSingleHostReverseProxy(url)
+        caCert, err := os.ReadFile("/etc/ssl/xconf/xconf.crt")
+        if err != nil {
+            log.Fatalf("Failed to read CA file: %v", err)
+        }
+
+        rootCAs := x509.NewCertPool()
+        rootCAs.AppendCertsFromPEM(caCert)
+
+        proxy.Transport = &http.Transport{
+            TLSClientConfig: &tls.Config{
+                RootCAs: rootCAs,
+            },
+        }
+
+        return proxy
 }
 
 func ProxyRequestHandler(proxy *httputil.ReverseProxy) func(http.ResponseWriter, *http.Request) {
